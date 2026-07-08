@@ -22,7 +22,7 @@
   html,body{margin:0;height:100%;}
   body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;line-height:1.5;}
   ::selection{background:#ffe4b3;}
-  .app{display:grid;grid-template-rows:auto auto auto 1fr auto;height:100vh;}
+  .app{display:grid;grid-template-rows:auto auto 1fr auto;height:100vh;}
 
   header{padding:14px 20px 10px;border-bottom:1px solid var(--border);display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;background:var(--panel);}
   header h1{font-size:14.5px;margin:0;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;gap:10px;}
@@ -165,7 +165,6 @@
   </nav>
 
   <div id="page1" style="display:contents;">
-    <div class="timeline" id="timeline"></div>
     <main>
       <div class="col" id="colGroups">
         <div class="col-title">Запросы из HAR <span id="groupCount"></span></div>
@@ -223,7 +222,7 @@ const GOLD_API_REQUESTS_BODY = [
     {
         id: 'manualIdentification', labels: [
             { key: 'laguange', value: '⇐ language (ввод клиента)' },
-            { key: 'brandId', value: '⇐ brandId (ввод клиента)' },
+            { key: 'brandId', value: '⇐ brandId (ввод к��иента)' },
             { key: 'vehicleId', value: '⇐ vehicleId (ввод клиента)' }
         ]
     },
@@ -442,9 +441,36 @@ const GOLD_API_SCHEMAS = {
     imagePartsTable: { kind: 'object', fields: [ { key: 'image', type: 'string' } ] },
 };
 
-/* Фиксированные справочники — тоже присланы пользователем (замена моих версий) */
-const FIXED_LANG_OPTIONS = [{ code: 'ru', label: 'Русский' }, { code: 'en', label: 'English' }];
-const FIXED_MODS_OPTIONS = [{ code: 'manual', label: 'Пошаговый выбор' }, { code: 'vin', label: 'По VIN' }, { code: 'chasis', label: 'Шасси' }];
+/* Справочники languages / identificationMods больше НЕ захардкожены — они
+   извлекаются из ответов импортированного HAR. Ищем в ответах массив под ключом
+   'languages' (для GET /languages) и 'mods' (для GET /vehicle-identification-mods)
+   и собираем уникальные значения. Если совпадений нет — список пустой. */
+function findArrayByKey(obj, key){
+  if (!obj || typeof obj !== 'object') return null;
+  if (Array.isArray(obj[key])) return obj[key];
+  for (const k of Object.keys(obj)){
+    const v = obj[k];
+    if (v && typeof v === 'object'){ const r = findArrayByKey(v, key); if (r) return r; }
+  }
+  return null;
+}
+function extractFixedOptionsFromCapture(wrapperKey){
+  const seen = new Set();
+  const out = [];
+  CAPTURE_DATA.forEach(e=>{
+    let json; try { json = JSON.parse(e.resBody); } catch(err){ return; }
+    const arr = findArrayByKey(json, wrapperKey);
+    if (!arr) return;
+    arr.forEach(v=>{
+      if (v == null) return;
+      const isObj = typeof v === 'object';
+      const code = isObj ? String(v.code ?? v.id ?? v.value ?? JSON.stringify(v)) : String(v);
+      const label = isObj ? String(v.label ?? v.name ?? code) : String(v);
+      if (!seen.has(code)){ seen.add(code); out.push({ code, label }); }
+    });
+  });
+  return out;
+}
 
 /* =========================================================================
    ВСПОМОГАТЕЛЬНЫЕ ГЕТТЕРЫ НАД КОНСТАНТАМИ ПОЛЬЗОВАТЕЛЯ
@@ -684,13 +710,17 @@ function buildGroups(){
   });
 }
 function initState(){
+  const langOptions = extractFixedOptionsFromCapture('languages');
+  const modsOptions = extractFixedOptionsFromCapture('mods');
+  const languageEnabled = {}; langOptions.forEach(o=>{ languageEnabled[o.code] = true; });
+  const modsEnabled = {}; modsOptions.forEach(o=>{ modsEnabled[o.code] = true; });
   STATE = {
     groups: buildGroups(),
     catalogCode:'MOBIS_WPC',
-    opTitles: {},
     customFields: { vinIdentification: { attributes: [] } },
-    languageEnabled: { ru:true, en:true },
-    modsEnabled: { manual:true, vin:true, chasis:true },
+    fixedOptions: { languages: langOptions, identificationMods: modsOptions },
+    languageEnabled,
+    modsEnabled,
     fixedPreviewOpen: { languages:false, identificationMods:false },
   };
   selectedId = STATE.groups.length ? STATE.groups[0].id : null;
@@ -733,7 +763,7 @@ function autoAnnotate(){
       if (matches.length) g.mapping.reqRoles[f] = `chain:${matches[0].id}:${matches[0].path}`;
     });
     const opDef = GOLD_API_REQUESTS.find(o=>o.id===p.op);
-    if (opDef && opDef.needsTitle && STATE.opTitles[p.op]===undefined) STATE.opTitles[p.op] = opDef.defaultTitle;
+    if (opDef && opDef.needsTitle && !g.mapping.title) g.mapping.title = opDef.defaultTitle;
   });
   render();
 }
@@ -747,22 +777,6 @@ function deleteGroup(id){
 /* =========================================================================
    RENDER — PAGE 1
    ========================================================================= */
-function renderTimeline(){
-  const tl = document.getElementById('timeline');
-  tl.innerHTML = '';
-  const ordered = [...STATE.groups].sort((a,b)=>a.entry.harIndex-b.entry.harIndex);
-  ordered.forEach(g=>{
-    const cls = ['tl-item'];
-    if (g.mapping.isFinal) cls.push('final'); else if (g.mapping.op) cls.push('mapped');
-    if (g.id===selectedId) cls.push('active');
-    const item = el(`<div class="${cls.join(' ')}" title="${esc(g.entry.method+' '+g.entry.url)}">
-        <span class="n">#${g.entry.harIndex}</span>${shortName(g.entry.url).slice(0,4)}
-        ${g.mapping.op?`<span class="o">${g.mapping.order}</span>`:''}
-      </div>`);
-    item.addEventListener('click', ()=>{ selectedId = g.id; render(); });
-    tl.appendChild(item);
-  });
-}
 function renderGroupList(){
   document.getElementById('groupCount').textContent = `(${STATE.groups.length})`;
   const wrap = document.getElementById('groupList');
@@ -772,7 +786,7 @@ function renderGroupList(){
     const opDef = GOLD_API_REQUESTS.find(o=>o.id===g.mapping.op);
     const opLabel = opDef?.label || '— не сопоставлено —';
     const showFinal = opDef && opDef.hasFinalFlag;
-    const title = opDef && opDef.needsTitle ? (STATE.opTitles[g.mapping.op]||'') : '';
+    const title = opDef && opDef.needsTitle ? (g.mapping.title||'') : '';
     const card = el(`
       <div class="group ${g.id===selectedId?'active':''} ${(showFinal && g.mapping.isFinal)?'final-true':''}">
         <button class="del-btn" title="Удалить запрос">${TRASH_SVG}</button>
@@ -875,6 +889,9 @@ function renderGoldSchemaNode(node, depth, seen){
       if (f.kind === 'array'){
         out += `<div class="std-row std-indent-${Math.min(depth,2)}"><span class="std-key">${esc(f.key)}[]</span><span class="std-type">массив</span></div>`;
         out += renderGoldSchemaNode(f.items, depth+1, seen2);
+      } else if (f.kind === 'object'){
+        out += `<div class="std-row std-indent-${Math.min(depth,2)}"><span class="std-key">${esc(f.key)}</span><span class="std-type">object</span></div>`;
+        out += renderGoldSchemaNode(f.items, depth+1, seen2);
       } else if (f.type === 'object' && f.fields){
         out += `<div class="std-row std-indent-${Math.min(depth,2)}"><span class="std-key">${esc(f.key)}</span><span class="std-type">object</span></div>`;
         out += renderGoldSchemaNode(f, depth+1, seen2);
@@ -917,8 +934,8 @@ function renderRight(){
   const opDef = GOLD_API_REQUESTS.find(o=>o.id===g.mapping.op);
   let titleHtml = '';
   if (opDef && opDef.needsTitle){
-    if (STATE.opTitles[g.mapping.op] === undefined) STATE.opTitles[g.mapping.op] = opDef.defaultTitle;
-    titleHtml = `<label class="inline">title для «${opDef.label}»: <input type="text" id="titleInput" value="${esc(STATE.opTitles[g.mapping.op])}" style="flex:1;"></label>`;
+    if (!g.mapping.title) g.mapping.title = opDef.defaultTitle;
+    titleHtml = `<label class="inline">title для «${opDef.label}» (для этого запроса): <input type="text" id="titleInput" value="${esc(g.mapping.title)}" style="flex:1;"></label>`;
   }
   let finalHtml = '';
   if (opDef && opDef.hasFinalFlag){
@@ -942,11 +959,14 @@ function renderRight(){
     ${stdHtml}
   `;
   document.getElementById('opSelect').addEventListener('change', e=>{
-    g.mapping.op = e.target.value; if (!g.mapping.order) g.mapping.order = 1; render();
+    g.mapping.op = e.target.value; if (!g.mapping.order) g.mapping.order = 1;
+    const nd = GOLD_API_REQUESTS.find(o=>o.id===g.mapping.op);
+    if (nd && nd.needsTitle && !g.mapping.title) g.mapping.title = nd.defaultTitle;
+    render();
   });
   document.getElementById('orderInput').addEventListener('change', e=>{ g.mapping.order = parseInt(e.target.value)||1; render(); });
   const ti = document.getElementById('titleInput');
-  if (ti) ti.addEventListener('change', e=>{ STATE.opTitles[g.mapping.op] = e.target.value; render(); });
+  if (ti) ti.addEventListener('change', e=>{ g.mapping.title = e.target.value; render(); });
   const fi = document.getElementById('isFinalInput');
   if (fi) fi.addEventListener('change', e=>{ g.mapping.isFinal = e.target.checked; render(); });
   const attrBtn = document.getElementById('attrAddBtn');
@@ -982,8 +1002,11 @@ function renderStepSummary(g, opId){
     const sample = typeof val === 'object' ? JSON.stringify(val).slice(0,90) : String(val);
     return `<div class="kv"><span class="k">${esc(path)}</span><span class="arrow">→</span><span class="v">${esc(stripArrow(targetLabelFor(opId, role)))}</span><span class="role">пример: ${esc(sample)}</span></div>`;
   }).join('') || '<div class="empty-inline">поля ответа не сопоставлены</div>';
+  const opDef = GOLD_API_REQUESTS.find(o=>o.id===opId);
+  const titleBit = (opDef && opDef.needsTitle && g.mapping.title) ? ` · title: "${esc(g.mapping.title)}"` : '';
+  const finalBit = (opDef && opDef.hasFinalFlag && g.mapping.isFinal) ? ` · isFinal: true` : '';
   return `<div class="step-summary">
-    <div class="step-summary-h">Шаг №${g.mapping.order} · ${esc(entry.method)} <span class="full-url">${esc(entry.url)}</span></div>
+    <div class="step-summary-h">Шаг №${g.mapping.order} · ${esc(entry.method)} <span class="full-url">${esc(entry.url)}</span>${titleBit}${finalBit}</div>
     <div class="step-summary-section"><div class="ss-label">Тело запроса → откуда берётся значение</div>${reqRows}</div>
     <div class="step-summary-section"><div class="ss-label">Ответ → сопоставленные стандартные поля</div>${resRows}</div>
   </div>`;
@@ -992,7 +1015,7 @@ function renderStepSummary(g, opId){
    (languages → {languages:[...]}, identificationMods → {mods:[...]}), а не
    произвольно — коды языков/режимов берутся из FIXED_*_OPTIONS с учётом чекбоксов. */
 function generateFixedResponseJson(opId){
-  const options = opId==='languages' ? FIXED_LANG_OPTIONS : FIXED_MODS_OPTIONS;
+  const options = opId==='languages' ? STATE.fixedOptions.languages : STATE.fixedOptions.identificationMods;
   const enabledMap = opId==='languages' ? STATE.languageEnabled : STATE.modsEnabled;
   const wrapperKey = opId==='languages' ? 'languages' : 'mods';
   const codes = options.filter(o=>enabledMap[o.code]).map(o=>o.code);
@@ -1000,7 +1023,9 @@ function generateFixedResponseJson(opId){
   return JSON.stringify(obj, null, 2);
 }
 function renderFixedListCard(op, options, enabledMap, storeKey){
-  const rows = options.map(o=>`<label class="checkbox-row"><input type="checkbox" class="fixed-cb" data-store="${storeKey}" data-op="${op.id}" data-code="${o.code}" ${enabledMap[o.code]?'checked':''}> ${o.code} — ${esc(o.label)}</label>`).join('');
+  const rows = options.length
+    ? options.map(o=>`<label class="checkbox-row"><input type="checkbox" class="fixed-cb" data-store="${storeKey}" data-op="${op.id}" data-code="${esc(o.code)}" ${enabledMap[o.code]?'checked':''}> ${esc(o.code)}${o.label && o.label!==o.code ? ' — '+esc(o.label) : ''}</label>`).join('')
+    : `<div class="empty-inline">В импортированном HAR не найдено значений для этого списка — загрузите HAR с ответом этого эндпоинта.</div>`;
   const isOpen = !!STATE.fixedPreviewOpen[op.id];
   return `<div class="op-card">
     <div class="op-card-h">
@@ -1024,19 +1049,18 @@ function renderOtherOpCard(op){
   const body = covered
     ? groups.map(g=>renderStepSummary(g, op.id)).join('')
     : `<div class="empty">В HAR нет запросов, сопоставленных с этой операцией.</div>`;
-  const titleLine = (op.needsTitle && STATE.opTitles[op.id]) ? `<div class="right-note">title: "${esc(STATE.opTitles[op.id])}"</div>` : '';
   return `<div class="op-card ${covered?'':'uncovered'}">
     <div class="op-card-h"><span class="name">${esc(op.label)}</span><span class="badge ${covered?'on':''}">${covered? groups.length+' шаг(ов)':'не покрыто HAR'}</span></div>
     ${chain}
-    <div class="op-card-body">${titleLine}${body}</div>
+    <div class="op-card-body">${body}</div>
   </div>`;
 }
 function renderPage2(){
   const wrap = document.getElementById('page2');
   const parts = [];
   GOLD_API_REQUESTS.forEach(op=>{
-    if (op.id === 'languages') parts.push(renderFixedListCard(op, FIXED_LANG_OPTIONS, STATE.languageEnabled, 'languageEnabled'));
-    else if (op.id === 'identificationMods') parts.push(renderFixedListCard(op, FIXED_MODS_OPTIONS, STATE.modsEnabled, 'modsEnabled'));
+    if (op.id === 'languages') parts.push(renderFixedListCard(op, STATE.fixedOptions.languages, STATE.languageEnabled, 'languageEnabled'));
+    else if (op.id === 'identificationMods') parts.push(renderFixedListCard(op, STATE.fixedOptions.identificationMods, STATE.modsEnabled, 'modsEnabled'));
     else parts.push(renderOtherOpCard(op));
   });
   const unmapped = STATE.groups.filter(g=>!g.mapping.op);
@@ -1063,7 +1087,7 @@ function renderPage2(){
    RENDER ROOT + WIRING
    ========================================================================= */
 function render(){
-  renderTimeline(); renderGroupList(); renderDetail(); renderRight(); renderProgress();
+  renderGroupList(); renderDetail(); renderRight(); renderProgress();
   if (currentPage === 2) renderPage2();
 }
 document.querySelectorAll('.tab').forEach(btn=>{
