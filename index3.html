@@ -175,7 +175,7 @@
         <div id="detail"><div class="empty">Выберите запрос слева.</div></div>
       </div>
       <div class="col" id="colRight">
-        <div class="col-title">Контракт шага</div>
+        <div class="col-title">Кон��ракт шага</div>
         <div id="rightPanel"><div class="empty">Выберите запрос слева.</div></div>
       </div>
     </main>
@@ -285,6 +285,11 @@ const GOLD_API_RESPONSE_TARGETS = [
     {
         id: 'ignore', labels: [
             { key: 'ignore', value: '— игнорировать —' }
+        ]
+    },
+    {
+        id: 'nextRequest', labels: [
+            { key: 'nextRequest', value: '— использовать для следующих запросов—' }
         ]
     },
     {
@@ -441,36 +446,11 @@ const GOLD_API_SCHEMAS = {
     imagePartsTable: { kind: 'object', fields: [ { key: 'image', type: 'string' } ] },
 };
 
-/* Справочники languages / identificationMods больше НЕ захардкожены — они
-   извлекаются из ответов импортированного HAR. Ищем в ответах массив под ключом
-   'languages' (для GET /languages) и 'mods' (для GET /vehicle-identification-mods)
-   и собираем уникальные значения. Если совпадений нет — список пустой. */
-function findArrayByKey(obj, key){
-  if (!obj || typeof obj !== 'object') return null;
-  if (Array.isArray(obj[key])) return obj[key];
-  for (const k of Object.keys(obj)){
-    const v = obj[k];
-    if (v && typeof v === 'object'){ const r = findArrayByKey(v, key); if (r) return r; }
-  }
-  return null;
-}
-function extractFixedOptionsFromCapture(wrapperKey){
-  const seen = new Set();
-  const out = [];
-  CAPTURE_DATA.forEach(e=>{
-    let json; try { json = JSON.parse(e.resBody); } catch(err){ return; }
-    const arr = findArrayByKey(json, wrapperKey);
-    if (!arr) return;
-    arr.forEach(v=>{
-      if (v == null) return;
-      const isObj = typeof v === 'object';
-      const code = isObj ? String(v.code ?? v.id ?? v.value ?? JSON.stringify(v)) : String(v);
-      const label = isObj ? String(v.label ?? v.name ?? code) : String(v);
-      if (!seen.has(code)){ seen.add(code); out.push({ code, label }); }
-    });
-  });
-  return out;
-}
+/* Фиксированные справочники languages / identificationMods — статические, к HAR
+   отношения не имеют: это стандартные ответы конструктора, которые отдаются как
+   есть. Пользователь чекбоксами отмечает, какие значения включены в ответ. */
+const FIXED_LANG_OPTIONS = [{ code: 'ru', label: 'Русский' }, { code: 'en', label: 'English' }];
+const FIXED_MODS_OPTIONS = [{ code: 'manual', label: 'Пошаговый выбор' }, { code: 'vin', label: 'По VIN' }, { code: 'chasis', label: 'Шасси' }];
 
 /* =========================================================================
    ВСПОМОГАТЕЛЬНЫЕ ГЕТТЕРЫ НАД КОНСТАНТАМИ ПОЛЬЗОВАТЕЛЯ
@@ -504,14 +484,17 @@ function deriveTargetsFromSchema(schema){
 function getResponseTargetsForOp(op){
   const ignoreEntry = GOLD_API_RESPONSE_TARGETS.find(e=>e.id==='ignore');
   const ignoreLabels = ignoreEntry ? ignoreEntry.labels : [{key:'ignore', value:'— игнорировать —'}];
-  if (!op) return ignoreLabels;
+  const nextEntry = GOLD_API_RESPONSE_TARGETS.find(e=>e.id==='nextRequest');
+  const nextLabels = nextEntry ? nextEntry.labels : [];
+  const globalLabels = [...ignoreLabels, ...nextLabels];
+  if (!op) return globalLabels;
   const entry = GOLD_API_RESPONSE_TARGETS.find(e=>e.id===op);
   let labels = entry ? [...entry.labels] : deriveTargetsFromSchema(GOLD_API_SCHEMAS[op]);
   if (op === 'vinIdentification'){
     const custom = (STATE.customFields.vinIdentification && STATE.customFields.vinIdentification.attributes) || [];
     labels = labels.concat(custom.map(c=>({key:'attributes.'+c.key, value:'⇒ attributes.'+c.key})));
   }
-  return [...ignoreLabels, ...labels];
+  return [...globalLabels, ...labels];
 }
 function isEmptyResRole(role){ return !role || role === 'ignore'; }
 function stripArrow(s){ return String(s).replace(/^[⇐⇒]\s*/,''); }
@@ -534,28 +517,22 @@ function hydrateCapture(rawList){ return rawList.map((r, idx) => ({ id: makeGuid
 let CAPTURE_DATA = hydrateCapture(DEMO_CAPTURE_RAW);
 
 /* =========================================================================
-   ИМПОРТ HAR ИЗ ФАЙЛА (реального проводника) — статические ресурсы отсеиваются,
-   query-параметры парсятся всегда, тело — если это не GET.
+   ИМПОРТ HAR ИЗ ФАЙЛА (реального проводника) — загружаются ВСЕ запросы без
+   отсеивания (лишние можно удалить вручную кнопкой корзины в списке запросов).
+   query-параметры парсятся всегда (см. parseRequestFields), тело — если это не GET.
    ========================================================================= */
-function isLikelyStaticHarEntry(e){
-  const url = (e.request && e.request.url || '').toLowerCase();
-  if (/\.(css|js|mjs|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|otf|map)(\?|$)/.test(url)) return true;
-  const mime = ((e.response && e.response.content && e.response.content.mimeType) || '').toLowerCase();
-  if (mime.includes('image/') || mime.includes('font/') || mime.includes('text/css') || mime.includes('javascript') || mime.includes('text/html')) return true;
-  return false;
-}
 function parseHarText(text){
   const har = JSON.parse(text);
   const entries = (har.log && har.log.entries) || [];
   const kept = [];
   entries.forEach(e=>{
-    if (isLikelyStaticHarEntry(e)) return;
     const req = e.request, res = e.response;
+    if (!req) return;
     const pd = req.postData || {};
     kept.push({
       id: makeGuid(), harIndex: kept.length, method: req.method, url: req.url,
       reqContentType: (pd.mimeType || '').split(';')[0].trim(),
-      reqBody: pd.text || '', resBody: (res.content && res.content.text) || ''
+      reqBody: pd.text || '', resBody: (res && res.content && res.content.text) || ''
     });
   });
   return kept;
@@ -710,15 +687,12 @@ function buildGroups(){
   });
 }
 function initState(){
-  const langOptions = extractFixedOptionsFromCapture('languages');
-  const modsOptions = extractFixedOptionsFromCapture('mods');
-  const languageEnabled = {}; langOptions.forEach(o=>{ languageEnabled[o.code] = true; });
-  const modsEnabled = {}; modsOptions.forEach(o=>{ modsEnabled[o.code] = true; });
+  const languageEnabled = {}; FIXED_LANG_OPTIONS.forEach(o=>{ languageEnabled[o.code] = true; });
+  const modsEnabled = {}; FIXED_MODS_OPTIONS.forEach(o=>{ modsEnabled[o.code] = true; });
   STATE = {
     groups: buildGroups(),
     catalogCode:'MOBIS_WPC',
     customFields: { vinIdentification: { attributes: [] } },
-    fixedOptions: { languages: langOptions, identificationMods: modsOptions },
     languageEnabled,
     modsEnabled,
     fixedPreviewOpen: { languages:false, identificationMods:false },
@@ -728,7 +702,7 @@ function initState(){
 function groupById(id){ return STATE.groups.find(g=>g.id===id); }
 
 /* =========================================================================
-   АВТО-РАЗМЕТКА (демонстрационная). Явные reqRoles в плане нужны только там, где
+   АВТО-РАЗМЕТКА (демонстрационная). Явн��е reqRoles в плане нужны только там, где
    в реальном HAR нет подходящего имени поля для авто-цепочки (chain-match); всё
    остальное подхватывается автоматически через findKeyMatches.
    ========================================================================= */
@@ -1015,7 +989,7 @@ function renderStepSummary(g, opId){
    (languages → {languages:[...]}, identificationMods → {mods:[...]}), а не
    произвольно — коды языков/режимов берутся из FIXED_*_OPTIONS с учётом чекбоксов. */
 function generateFixedResponseJson(opId){
-  const options = opId==='languages' ? STATE.fixedOptions.languages : STATE.fixedOptions.identificationMods;
+  const options = opId==='languages' ? FIXED_LANG_OPTIONS : FIXED_MODS_OPTIONS;
   const enabledMap = opId==='languages' ? STATE.languageEnabled : STATE.modsEnabled;
   const wrapperKey = opId==='languages' ? 'languages' : 'mods';
   const codes = options.filter(o=>enabledMap[o.code]).map(o=>o.code);
@@ -1023,9 +997,7 @@ function generateFixedResponseJson(opId){
   return JSON.stringify(obj, null, 2);
 }
 function renderFixedListCard(op, options, enabledMap, storeKey){
-  const rows = options.length
-    ? options.map(o=>`<label class="checkbox-row"><input type="checkbox" class="fixed-cb" data-store="${storeKey}" data-op="${op.id}" data-code="${esc(o.code)}" ${enabledMap[o.code]?'checked':''}> ${esc(o.code)}${o.label && o.label!==o.code ? ' — '+esc(o.label) : ''}</label>`).join('')
-    : `<div class="empty-inline">В импортированном HAR не найдено значений для этого списка — загрузите HAR с ответом этого эндпоинта.</div>`;
+  const rows = options.map(o=>`<label class="checkbox-row"><input type="checkbox" class="fixed-cb" data-store="${storeKey}" data-op="${op.id}" data-code="${esc(o.code)}" ${enabledMap[o.code]?'checked':''}> ${esc(o.code)} — ${esc(o.label)}</label>`).join('');
   const isOpen = !!STATE.fixedPreviewOpen[op.id];
   return `<div class="op-card">
     <div class="op-card-h">
@@ -1059,8 +1031,8 @@ function renderPage2(){
   const wrap = document.getElementById('page2');
   const parts = [];
   GOLD_API_REQUESTS.forEach(op=>{
-    if (op.id === 'languages') parts.push(renderFixedListCard(op, STATE.fixedOptions.languages, STATE.languageEnabled, 'languageEnabled'));
-    else if (op.id === 'identificationMods') parts.push(renderFixedListCard(op, STATE.fixedOptions.identificationMods, STATE.modsEnabled, 'modsEnabled'));
+    if (op.id === 'languages') parts.push(renderFixedListCard(op, FIXED_LANG_OPTIONS, STATE.languageEnabled, 'languageEnabled'));
+    else if (op.id === 'identificationMods') parts.push(renderFixedListCard(op, FIXED_MODS_OPTIONS, STATE.modsEnabled, 'modsEnabled'));
     else parts.push(renderOtherOpCard(op));
   });
   const unmapped = STATE.groups.filter(g=>!g.mapping.op);
@@ -1110,10 +1082,10 @@ document.getElementById('harFileInput').addEventListener('change', (e)=>{
   reader.onload = () => {
     try {
       const kept = parseHarText(reader.result);
-      if (!kept.length){ alert('В этом HAR не найдено запросов, похожих на вызовы API (после отсеивания статики).'); return; }
+      if (!kept.length){ alert('В этом HAR не найдено ни одного запроса.'); return; }
       CAPTURE_DATA = kept;
       initState();
-      document.getElementById('sourceTag').textContent = `— импортировано из файла «${file.name}» (${kept.length} запрос(ов) после отсева статики)`;
+      document.getElementById('sourceTag').textContent = `— импортировано из файла «${file.name}» (${kept.length} запрос(ов); лишние удалите вручную)`;
       render();
     } catch(err){ alert('Не удалось разобрать HAR-файл: ' + err.message); }
   };
