@@ -1,0 +1,1104 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Recipe Constructor — HAR → стандартный API</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#eef1f6; --panel:#ffffff; --panel-alt:#f6f8fb; --border:#d9dfe9; --border-soft:#e6ebf2;
+    --text:#161a22; --text-dim:#5b6474; --text-faint:#8b93a3;
+    --accent:#f5a623; --accent-bg:#fff6e6;
+    --get:#0f8a45; --get-bg:#e3f8ec; --get-bd:#a8e3c1;
+    --post:#2f6fed; --post-bg:#eaf1ff; --post-bd:#b9d1fc;
+    --danger:#d9363e; --danger-bg:#fdecec;
+    --purple:#8b5cf6; --purple-bg:#f3eeff;
+    --final-true-fg:#0a7a3d; --final-true-bg:#d7f5e3; --final-true-bd:#a6e6c3;
+    --final-false-fg:#7a8494; --final-false-bg:#eef1f6; --final-false-bd:#dbe1ea;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;line-height:1.5;}
+  ::selection{background:#ffe4b3;}
+  .app{display:grid;grid-template-rows:auto auto auto 1fr auto;height:100vh;}
+
+  header{padding:14px 20px 10px;border-bottom:1px solid var(--border);display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;background:var(--panel);}
+  header h1{font-size:14.5px;margin:0;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;gap:10px;}
+  header h1 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;box-shadow:0 0 0 3px var(--accent-bg);}
+  header .tag{color:var(--text-faint);font-size:10.5px;font-weight:400;}
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  button{font-family:inherit;font-size:11px;font-weight:600;letter-spacing:.03em;background:var(--panel-alt);color:var(--text);border:1px solid var(--border);padding:6px 11px;border-radius:5px;cursor:pointer;text-transform:uppercase;}
+  button:hover{border-color:#b7c0d1;background:#e9edf3;}
+  button.primary{background:var(--post);color:#fff;border-color:var(--post);}
+  button.primary:hover{background:#245ad1;}
+  button.tab{text-transform:none;font-size:12px;padding:8px 16px;}
+  button.tab.active{background:var(--post);color:#fff;border-color:var(--post);}
+  select,input[type=text],input[type=number]{font-family:inherit;font-size:11px;background:#fff;color:var(--text);border:1px solid var(--border);border-radius:5px;padding:5px 7px;}
+  select:focus,input:focus,button:focus-visible{outline:2px solid var(--post);outline-offset:1px;}
+  input[type=number]{width:52px;}
+
+  nav.pages{display:flex;gap:6px;padding:8px 20px;border-bottom:1px solid var(--border);background:var(--panel-alt);}
+
+  .timeline{display:flex;gap:3px;padding:10px 20px;border-bottom:1px solid var(--border);overflow-x:auto;background:var(--panel);}
+  .tl-item{flex:0 0 auto;min-width:38px;height:34px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;color:#fff;cursor:pointer;border:1px solid rgba(0,0,0,.08);position:relative;background:var(--post);}
+  .tl-item .n{position:absolute;top:-8px;left:2px;font-size:8px;color:var(--text-faint);font-weight:400;}
+  .tl-item .o{position:absolute;bottom:-8px;right:2px;font-size:8px;color:var(--text);background:#fff;border-radius:3px;padding:0 2px;font-weight:700;}
+  .tl-item.active{outline:2px solid var(--accent);outline-offset:1px;}
+  .tl-item.mapped{background:var(--get);}
+  .tl-item.final{background:var(--final-true-fg);}
+
+  main{display:grid;grid-template-columns:340px 1fr 330px;overflow:hidden;}
+  .col{overflow-y:auto;padding:14px;}
+  .col + .col{border-left:1px solid var(--border);}
+  .col-title{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint);margin:0 0 10px;display:flex;justify-content:space-between;align-items:center;}
+
+  .group{position:relative;border:1px solid var(--border);border-radius:8px;padding:10px 34px 10px 12px;margin-bottom:8px;cursor:pointer;background:var(--panel);box-shadow:0 1px 2px rgba(20,30,50,.04);}
+  .group:hover{border-color:#aeb8c9;}
+  .group.active{border-color:var(--accent);background:var(--accent-bg);}
+  .group.final-true{background:var(--final-true-bg);}
+  .group .method{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:9px;margin-right:6px;background:var(--post-bg);color:var(--post);border:1px solid var(--post-bd);}
+  .group .path{font-size:11.5px;color:var(--text);word-break:break-all;font-weight:700;}
+  .final-line{display:inline-block;margin-top:5px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:9px;}
+  .final-line.true{color:var(--final-true-fg);background:var(--final-true-bg);border:1px solid var(--final-true-bd);}
+  .final-line.false{color:var(--final-false-fg);background:var(--final-false-bg);border:1px solid var(--final-false-bd);}
+  .group .meta{margin-top:5px;font-size:10px;color:var(--text-faint);}
+  .group .op-badge{margin-top:6px;font-size:9.5px;padding:2px 7px;border-radius:9px;display:inline-block;background:var(--panel-alt);color:var(--text-dim);border:1px solid var(--border-soft);}
+  .group .op-badge.set{color:#fff;background:var(--get);border-color:var(--get);}
+  .group .order-badge{font-size:9.5px;color:var(--post);border:1px solid var(--post-bd);background:var(--post-bg);border-radius:9px;padding:0 6px;margin-left:5px;}
+  .group .title-line{margin-top:4px;font-size:10px;color:var(--text-dim);font-style:italic;}
+  .del-btn{position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:5px;border:1px solid var(--danger-bg);background:var(--danger-bg);color:var(--danger);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;}
+  .del-btn:hover{background:var(--danger);color:#fff;border-color:var(--danger);}
+
+  .block{border:1px solid var(--border);border-radius:8px;margin-bottom:14px;background:var(--panel);box-shadow:0 1px 2px rgba(20,30,50,.04);}
+  .block-h{padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);display:flex;justify-content:space-between;background:var(--panel-alt);border-radius:8px 8px 0 0;flex-wrap:wrap;gap:4px;}
+  .block-h .full-url{color:var(--post);text-transform:none;font-weight:600;word-break:break-all;}
+  .block-body{padding:10px 12px;}
+
+  .field-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border-soft);flex-wrap:wrap;}
+  .field-row .fname{flex:0 0 150px;font-size:11.5px;color:var(--text);font-weight:600;}
+  .field-row .fval{font-size:10px;color:var(--text-faint);flex:1 1 90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .field-row select{flex:0 0 270px;}
+  .match-badges{width:100%;display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;}
+  .match-badge{font-size:9px;padding:2px 6px;border-radius:9px;border:1px solid var(--post-bd);color:var(--post);background:var(--post-bg);}
+
+  .schema-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px dashed var(--border-soft);}
+  .schema-row .path{color:var(--text);font-size:11px;flex:1;word-break:break-all;}
+  .schema-row .type{font-size:9px;color:var(--text-faint);width:44px;flex:0 0 auto;}
+  .schema-row select{width:260px;flex:0 0 auto;}
+  .schema-indent-1{padding-left:16px;}
+  .schema-indent-2{padding-left:32px;}
+  .schema-indent-3{padding-left:48px;}
+  .schema-arr-tag{font-size:8.5px;color:var(--post);border:1px solid var(--post-bd);background:var(--post-bg);border-radius:9px;padding:0 5px;margin-left:6px;}
+
+  pre.json{background:var(--panel-alt);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:11px;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto;margin:0;}
+  .jk{color:#2f6fed;} .js{color:#a15c00;} .jn{color:#7c3aed;} .jb{color:#0f8a45;} .jz{color:#8b93a3;}
+
+  .right-note{color:var(--text-dim);font-size:11px;margin-bottom:10px;line-height:1.6;}
+  label.inline{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);margin-bottom:10px;}
+  label.checkbox-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text);padding:6px 0;border-bottom:1px dashed var(--border-soft);}
+
+  .std-schema{border:1px solid var(--border-soft);border-radius:6px;background:var(--panel-alt);padding:8px 10px;margin-top:6px;}
+  .std-row{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:11px;}
+  .std-row .std-key{color:var(--text);font-weight:700;}
+  .std-row .std-type{color:var(--text-faint);font-size:9.5px;}
+  .std-row .std-flag{font-size:9px;color:var(--purple);background:var(--purple-bg);border-radius:9px;padding:0 5px;}
+  .std-indent-1{padding-left:14px;} .std-indent-2{padding-left:28px;}
+  .std-extra{display:flex;align-items:center;gap:6px;padding:2px 0 2px 14px;font-size:10.5px;color:var(--get);}
+  .std-add-row{display:flex;gap:6px;padding:5px 0 2px 14px;}
+  .std-add-row input{flex:1;font-size:10.5px;}
+  .std-add-row button{padding:4px 8px;font-size:10px;}
+
+  footer{border-top:1px solid var(--border);padding:10px 20px;background:var(--panel);display:flex;align-items:center;justify-content:flex-start;gap:12px;}
+  .progress{display:flex;gap:8px;align-items:center;font-size:10.5px;color:var(--text-dim);}
+  .barwrap{width:150px;height:5px;background:var(--panel-alt);border-radius:3px;overflow:hidden;border:1px solid var(--border-soft);}
+  .bar{height:100%;background:var(--get);width:0%;transition:width .25s;}
+
+  .empty{color:var(--text-faint);font-size:11px;padding:20px 4px;}
+  .empty-inline{color:var(--text-faint);font-size:10.5px;padding:4px 0;}
+
+  #page2{display:none;overflow-y:auto;padding:18px 24px;background:var(--bg);}
+  .op-card{border:1px solid var(--border);border-radius:8px;margin-bottom:16px;background:var(--panel);box-shadow:0 1px 2px rgba(20,30,50,.04);}
+  .op-card.uncovered{opacity:.6;}
+  .op-card-h{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;background:var(--panel-alt);border-radius:8px 8px 0 0;}
+  .op-card-h .name{font-weight:700;font-size:12.5px;}
+  .op-card-h .badge{font-size:9.5px;padding:2px 8px;border-radius:9px;border:1px solid var(--border-soft);color:var(--text-faint);}
+  .op-card-h .badge.on{color:#fff;background:var(--get);border-color:var(--get);}
+  .chain-steps{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px;align-items:center;}
+  .chain-step{font-size:10.5px;padding:5px 9px;border-radius:9px;background:var(--post-bg);color:var(--post);border:1px solid var(--post-bd);}
+  .chain-arrow{color:var(--text-faint);}
+  .op-card-body{padding:0 14px 14px;}
+  .step-summary{border:1px solid var(--border-soft);border-radius:6px;margin-top:10px;overflow:hidden;}
+  .step-summary-h{background:var(--panel-alt);padding:7px 10px;font-size:11px;font-weight:700;}
+  .step-summary-h .full-url{color:var(--post);font-weight:600;word-break:break-all;}
+  .step-summary-section{padding:8px 10px;border-top:1px solid var(--border-soft);}
+  .ss-label{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);margin-bottom:5px;}
+  .kv{display:flex;gap:8px;flex-wrap:wrap;padding:3px 0;font-size:11px;align-items:baseline;}
+  .kv .k{font-weight:700;color:var(--text);flex:0 0 160px;}
+  .kv .arrow{color:var(--text-faint);}
+  .kv .v{color:var(--text-dim);}
+  .kv .role{color:var(--get);font-size:10px;}
+  .warn-block{border:1px dashed var(--danger);color:var(--danger);background:var(--danger-bg);border-radius:6px;padding:10px 14px;margin-top:8px;font-size:11px;}
+
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:#cdd4e0;border-radius:5px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <h1><span class="dot"></span>Recipe Constructor <span class="tag" id="sourceTag">— демо-данные (Mobis/KIA WPC); импортируйте свой HAR кнопкой справа</span></h1>
+    <div class="toolbar">
+      <button id="btnImportHar">📁 Импортировать HAR</button>
+      <input type="file" id="harFileInput" accept=".har,application/json" style="display:none;">
+      <button id="btnAuto">Авто-разметить (демо)</button>
+      <button id="btnReset">Сбросить разметку</button>
+    </div>
+  </header>
+
+  <nav class="pages">
+    <button class="tab active" data-page="1">1. Импорт из HAR</button>
+    <button class="tab" data-page="2">2. Стандартный API</button>
+  </nav>
+
+  <div id="page1" style="display:contents;">
+    <div class="timeline" id="timeline"></div>
+    <main>
+      <div class="col" id="colGroups">
+        <div class="col-title">Запросы из HAR <span id="groupCount"></span></div>
+        <div id="groupList"></div>
+      </div>
+      <div class="col" id="colDetail">
+        <div class="col-title">Разбор запроса</div>
+        <div id="detail"><div class="empty">Выберите запрос слева.</div></div>
+      </div>
+      <div class="col" id="colRight">
+        <div class="col-title">Контракт шага</div>
+        <div id="rightPanel"><div class="empty">Выберите запрос слева.</div></div>
+      </div>
+    </main>
+  </div>
+
+  <div id="page2"></div>
+
+  <footer>
+    <div class="progress">
+      <span id="progressText">0 / 0</span>
+      <div class="barwrap"><div class="bar" id="progressBar"></div></div>
+    </div>
+  </footer>
+</div>
+
+<script>
+/* =========================================================================================
+   КОНСТАНТЫ ПОЛЬЗОВАТЕЛЯ (GOLD_API_*) — подставлены как есть из присланного constants.js,
+   без изменения структуры/логики. Небольшие пояснения расставлены прямо в комментариях
+   рядом с использованием, где поведение конструктора подстраивается под их форму.
+   ========================================================================================= */
+
+const GOLD_API_REQUESTS = [
+    { id: 'languages', label: 'GET /languages' },
+    { id: 'brands', label: 'POST /brands' },
+    { id: 'identificationMods', label: 'GET /vehicle-identification-mods' },
+    { id: 'manualIdentification', label: 'POST /vehicle-manual-identification', needsTitle: true, defaultTitle: 'configurations', hasFinalFlag: true },
+    { id: 'vinIdentification', label: 'POST /vehicle-vin-identification', needsTitle: true, defaultTitle: 'configuration', hasFinalFlag: true },
+    { id: 'tree', label: 'POST /tree' },
+    { id: 'treeChild', label: 'POST /tree/child' },
+    { id: 'treePartsTable', label: 'POST /tree/partsTable' },
+    { id: 'imageModel', label: 'POST /image/model' },
+    { id: 'imageNode', label: 'POST /image/node' },
+    { id: 'imageNodeLeaf', label: 'POST /image/node/leaf' },
+    { id: 'imagePartsTable', label: 'POST /image/partsTable' },
+];
+
+const GOLD_API_REQUESTS_BODY = [
+    {
+        id: 'brands', labels: [
+            { key: 'laguange', value: '⇐ language (ввод клиента)' }
+        ]
+    },
+    {
+        id: 'manualIdentification', labels: [
+            { key: 'laguange', value: '⇐ language (ввод клиента)' },
+            { key: 'brandId', value: '⇐ brandId (ввод клиента)' },
+            { key: 'vehicleId', value: '⇐ vehicleId (ввод клиента)' }
+        ]
+    },
+    {
+        id: 'vinIdentification', labels: [
+            { key: 'laguange', value: '⇐ language (ввод клиента)' },
+            { key: 'brandId', value: '⇐ brandId (ввод клиента)' },
+            { key: 'vehicleId', value: '⇐ vehicleId (ввод клиента)' },
+            { key: 'vin', value: '⇐ vin (ввод клиента)' },
+        ]
+    },
+    {
+        id: 'tree', labels: [
+            { key: 'laguange', value: '⇐ language (ввод клиента)' },
+            { key: 'vehicleId', value: '⇐ vehicleId (ввод клиента)' }
+        ]
+    },
+    {
+        id: 'treeChild', labels: [
+            { key: 'laguange', value: '⇐ language (ввод клиента)' },
+            { key: 'brandId', value: '⇐ brandId (ввод клиента)' },
+            { key: 'nodeId', value: '⇐ nodeId (ввод клиента)' }
+        ]
+    },
+    {
+        id: 'treePartsTable', labels: [
+            { key: 'laguange', value: '⇐ language (ввод клиента)' },
+            { key: 'brandId', value: '⇐ brandId (ввод клиента)' },
+            { key: 'nodeId', value: '⇐ nodeId (ввод клиента)' }
+        ]
+    },
+    {
+        id: 'imageModel', labels: [
+            { key: 'image', value: '⇐ image (ввод клиента)' },
+        ]
+    },
+    {
+        id: 'imageNode', labels: [
+            { key: 'image', value: '⇐ image (ввод клиента)' },
+        ]
+    },
+    {
+        id: 'imageNodeLeaf', labels: [
+            { key: 'image', value: '⇐ image (ввод клиента)' },
+        ]
+    },
+    {
+        id: 'imagePartsTable', labels: [
+            { key: 'image', value: '⇐ image (ввод клиента)' },
+        ]
+    },
+    {
+        id: 'notSelected', labels: [
+            { key: 'notSelected', value: '— не сопоставлено —' }
+        ]
+    }
+];
+
+const GOLD_API_RESPONSE_TARGETS = [
+    {
+        id: 'ignore', labels: [
+            { key: 'ignore', value: '— игнорировать —' }
+        ]
+    },
+    {
+        id: 'manualIdentification', labels: [
+            { key: 'vehicleId', value: '⇒ vehicleId' },
+            { key: 'name', value: '⇒ name' },
+            { key: 'code', value: '⇒ code' },
+            { key: 'description', value: '⇒ description' },
+            { key: 'image', value: '⇒ image' },
+        ]
+    },
+    {
+        id: 'vinIdentification', labels: [
+            { key: 'vehicleId', value: '⇒ vehicleId' },
+            { key: 'name', value: '⇒ name' },
+            { key: 'description', value: '⇒ description' },
+            { key: 'image', value: '⇒ image' },
+            { key: 'attributes.VIN', value: '⇒ attributes.VIN' },
+            { key: 'attributes.ModelCode', value: '⇒ attributes.Model Code' },
+            { key: 'attributes.ModelYear', value: '⇒ attributes.Model Year' },
+            { key: 'attributes.NationalCode', value: '⇒ attributes.National Code' },
+            { key: 'attributes.InteriorColor', value: '⇒ attributes.Interior Color' },
+            { key: 'attributes.CarSeries', value: '⇒ attributes.Car Series' },
+            { key: 'attributes.BodyType', value: '⇒ attributes.BodyType' },
+            { key: 'attributes.DriveHDLType', value: '⇒ attributes.Drive HDL Type' },
+            { key: 'attributes.Engine', value: '⇒ attributes.Engine' },
+        ]
+    },
+    {
+        id: 'tree', labels: [
+            { key: 'id', value: '⇒ id' },
+            { key: 'name', value: '⇒ name' },
+            { key: 'code', value: '⇒ code' },
+            { key: 'description', value: '⇒ description' },
+            { key: 'image', value: '⇒ image' },
+            { key: 'isLeaf', value: '⇒ isLeaf' },
+            { key: 'child', value: '⇒ child[]' },
+        ]
+    },
+    {
+        id: 'treeChild', labels: [
+            { key: 'id', value: '⇒ id' },
+            { key: 'name', value: '⇒ name' },
+            { key: 'code', value: '⇒ code' },
+            { key: 'description', value: '⇒ description' },
+            { key: 'image', value: '⇒ image' },
+            { key: 'isLeaf', value: '⇒ isLeaf' },
+            { key: 'child', value: '⇒ child[]' },
+        ]
+    },
+    {
+        id: 'treePartsTable', labels: [
+            { key: 'coordinates.code', value: '⇒ coordinates.code' },
+            { key: 'coordinates.x', value: '⇒ coordinates.x' },
+            { key: 'coordinates.y', value: '⇒ coordinates.y' },
+            { key: 'coordinates.width', value: '⇒ coordinates.width' },
+            { key: 'coordinates.height', value: '⇒ coordinates.height' },
+            { key: 'coordinates.type', value: '⇒ coordinates.type' },
+            { key: 'table.row.code', value: '⇒ table.row.code' },
+            { key: 'table.row.partNumber', value: '⇒ table.row.partNumber' },
+            { key: 'table.row.name', value: '⇒ table.row.name' },
+            { key: 'table.row.quantity', value: '⇒ table.row.quantity' },
+            { key: 'table.row.first', value: '⇒ table.row.first' },
+            { key: 'table.row.last', value: '⇒ table.row.last' },
+        ]
+    },
+]
+
+/* NODE_SCHEMA — рекурсивная схема узла дерева (tree/treeChild): 'child' ссылается сам на
+   себя. При отрисовке в renderGoldSchemaNode() это отслеживается через Set(seen), чтобы
+   не уйти в бесконечную рекурсию — при повторной встрече того же объекта печатается
+   пометка "рекурсивно" вместо повторного разворачивания дерева. */
+const NODE_SCHEMA = {
+    type: 'object',
+    fields: [
+        { key: 'id', type: 'string' },
+        { key: 'name', type: 'string' },
+        { key: 'code', type: 'string' },
+        { key: 'description', type: 'string' },
+        { key: 'image', type: 'string' },
+        { key: 'isLeaf', type: 'boolean' }
+    ]
+};
+NODE_SCHEMA.fields.push({
+    key: 'child',
+    kind: 'array',
+    items: NODE_SCHEMA
+});
+
+const GOLD_API_SCHEMAS = {
+    languages: {
+        kind: 'object',
+        fields: [
+            { key: 'languages', kind: 'array', items: { type: 'string' } }
+        ]
+    },
+    brands: {
+        kind: 'array',
+        items: { type: 'object', fields: [ { key: 'id', type: 'string' }, { key: 'name', type: 'string' } ] }
+    },
+    identificationMods: {
+        kind: 'object',
+        fields: [
+            { key: 'mods', kind: 'array', items: { type: 'string' } }
+        ]
+    },
+    manualIdentification: {
+        kind: 'object',
+        fields: [
+            { key: 'isFinal', type: 'boolean' },
+            { key: 'title', type: 'string' },
+            { key: 'values', kind: 'array', items: { type: 'object', fields: [
+                { key: 'vehicleId', type: 'string' }, { key: 'name', type: 'string' },
+                { key: 'code', type: 'string' }, { key: 'description', type: 'string' }, { key: 'image', type: 'string' },
+            ]}}
+        ]
+    },
+    vinIdentification: {
+        kind: 'object',
+        fields: [
+            { key: 'isFinal', type: 'boolean' },
+            { key: 'title', type: 'string' },
+            { key: 'values', kind: 'object', items: { type: 'object', fields: [
+                { key: 'vehicleId', type: 'string' }, { key: 'name', type: 'string' },
+                { key: 'description', type: 'string' }, { key: 'image', type: 'string' },
+                { key: 'attributes', kind: 'array', items: { type: 'object', fields: [
+                    { key: 'name', type: 'string' }, { key: 'value', type: 'string' }
+                ]}}
+            ]}}
+        ]
+    },
+    tree: { kind: 'object', fields: [ { key: 'nodes', kind: 'array', items: NODE_SCHEMA } ] },
+    treeChild: { kind: 'object', fields: [ { key: 'nodes', kind: 'array', items: NODE_SCHEMA } ] },
+    treePartsTable: {
+        kind: 'object',
+        fields: [
+            { key: 'image', type: 'string' },
+            { key: 'coordinates', kind: 'array', items: { type: 'object', fields: [
+                { key: 'code', type: 'string' }, { key: 'x', type: 'string' }, { key: 'y', type: 'string' },
+                { key: 'width', type: 'string' }, { key: 'height', type: 'string' }, { key: 'type', type: 'string' }
+            ]}},
+            { key: 'table', type: 'object', fields: [
+                { key: 'columns', kind: 'array', items: { type: 'object', fields: [ { key: 'name', type: 'string' }, { key: 'value', type: 'string' } ]}},
+                { key: 'row', kind: 'array', items: { type: 'object', fields: [
+                    { key: 'code', type: 'string' }, { key: 'partNumber', type: 'string' }, { key: 'name', type: 'string' },
+                    { key: 'quantity', type: 'string' }, { key: 'first', type: 'string' }, { key: 'last', type: 'string' }
+                ]}}
+            ]}
+        ]
+    },
+    imageModel: { kind: 'object', fields: [ { key: 'image', type: 'string' } ] },
+    imageNode: { kind: 'object', fields: [ { key: 'image', type: 'string' } ] },
+    imageNodeLeaf: { kind: 'object', fields: [ { key: 'image', type: 'string' } ] },
+    imagePartsTable: { kind: 'object', fields: [ { key: 'image', type: 'string' } ] },
+};
+
+/* Фиксированные справочники — тоже присланы пользователем (замена моих версий) */
+const FIXED_LANG_OPTIONS = [{ code: 'ru', label: 'Русский' }, { code: 'en', label: 'English' }];
+const FIXED_MODS_OPTIONS = [{ code: 'manual', label: 'Пошаговый выбор' }, { code: 'vin', label: 'По VIN' }, { code: 'chasis', label: 'Шасси' }];
+
+/* =========================================================================
+   ВСПОМОГАТЕЛЬНЫЕ ГЕТТЕРЫ НАД КОНСТАНТАМИ ПОЛЬЗОВАТЕЛЯ
+   ========================================================================= */
+
+/* Роли для полей ЗАПРОСА конкретной операции контракта: всегда начинаются с
+   варианта "не сопоставлено" (GOLD_API_REQUESTS_BODY.notSelected), затем — если
+   для операции есть запись — её реальные роли (brandId/vehicleId/vin/language/...). */
+function getRequestBodyLabelsForOp(op){
+  const notSel = GOLD_API_REQUESTS_BODY.find(e=>e.id==='notSelected');
+  const notSelLabels = notSel ? notSel.labels : [{key:'notSelected', value:'— не сопоставлено —'}];
+  if (!op) return notSelLabels;
+  const entry = GOLD_API_REQUESTS_BODY.find(e=>e.id===op);
+  return entry ? [...notSelLabels, ...entry.labels] : notSelLabels;
+}
+/* Признак "поле запроса не сопоставлено" — либо роль не выбрана вовсе, либо явно 'notSelected' */
+function isEmptyReqRole(role){ return !role || role === 'notSelected'; }
+
+/* Если для операции нет явного списка в GOLD_API_RESPONSE_TARGETS (это касается
+   brands / imageModel / imageNode / imageNodeLeaf / imagePartsTable), выводим
+   базовый набор целей прямо из верхнеуровневых примитивных полей GOLD_API_SCHEMAS,
+   чтобы у пользователя не было полностью пустого списка целей. */
+function deriveTargetsFromSchema(schema){
+  if (!schema) return [];
+  const node = schema.kind === 'array' ? schema.items : schema;
+  if (!node || !node.fields) return [];
+  return node.fields.filter(f=>!f.kind && f.type!=='object').map(f=>({key:f.key, value:'⇒ '+f.key}));
+}
+/* Цели для полей ОТВЕТА конкретной операции: 'ignore' + (явный список ИЛИ производный
+   из схемы) + для vinIdentification — вручную добавленные атрибуты (см. STATE.customFields) */
+function getResponseTargetsForOp(op){
+  const ignoreEntry = GOLD_API_RESPONSE_TARGETS.find(e=>e.id==='ignore');
+  const ignoreLabels = ignoreEntry ? ignoreEntry.labels : [{key:'ignore', value:'— игнорировать —'}];
+  if (!op) return ignoreLabels;
+  const entry = GOLD_API_RESPONSE_TARGETS.find(e=>e.id===op);
+  let labels = entry ? [...entry.labels] : deriveTargetsFromSchema(GOLD_API_SCHEMAS[op]);
+  if (op === 'vinIdentification'){
+    const custom = (STATE.customFields.vinIdentification && STATE.customFields.vinIdentification.attributes) || [];
+    labels = labels.concat(custom.map(c=>({key:'attributes.'+c.key, value:'⇒ attributes.'+c.key})));
+  }
+  return [...ignoreLabels, ...labels];
+}
+function isEmptyResRole(role){ return !role || role === 'ignore'; }
+function stripArrow(s){ return String(s).replace(/^[⇐⇒]\s*/,''); }
+
+const TRASH_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-9 0v14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6H7Z"/></svg>';
+
+/* =========================================================================
+   ДЕМО-ДАННЫЕ (Mobis/KIA WPC) — стартовый набор до импорта настоящего .har
+   ========================================================================= */
+const DEMO_CAPTURE_RAW = [{"method": "POST", "url": "https://wpc.mobis.co.kr/search/getVinList.do", "reqContentType": "application/x-www-form-urlencoded", "reqBody": "vin=KNEDE244286326229&lpno=N", "resBody": "{\"resultList\":[{\"cmpceg\":\"RIO 05: SEP.2006-                                           \",\"cmbdcd\":\"K\",\"vgofdt\":\"20071012\",\"vgvin\":\"KNEDE244286326229\",\"mlud\":\"DRIVE TYPE - RHD &gt; WEATHER - THE TEMPERATE ZONE &gt; SEDAN - 5DR 5P &gt; 1500 CC - U &gt; DOHC - TCI &gt; DIESEL - DIESEL &gt; MANUAL T/M - 5 SPEED 2WD \"}]}"}, {"method": "POST", "url": "https://wpc.mobis.co.kr/search/getVinCheck.do", "reqContentType": "application/x-www-form-urlencoded", "reqBody": "searchVin=KNEDE244286326229", "resBody": "{\"resultList\":[{\"cmpceg\":\"RIO 05: SEP.2006-                                           \",\"cmbdcd\":\"K\",\"cmbpno\":\"KEURPTC05\",\"cmgrty\":\"TC\"}]}"}, {"method": "POST", "url": "https://wpc.mobis.co.kr/search/getVinInfo.do", "reqContentType": "application/x-www-form-urlencoded", "reqBody": "searchVin=KNEDE244286326229&searchBpno=KEURPTC05", "resBody": "{\"oilList\":[],\"capaList\":[],\"optionList\":[{\"opcd\":\"0101A3\",\"opct\":\"E\",\"opeg\":\"MODEL YEAR PACKAGE - 07MY\",\"type\":\"\"},{\"opcd\":\"2841B3\",\"opct\":\"E\",\"opeg\":\"EMISSION REGULATION - EC 2005\",\"type\":\"\"}],\"carInfo\":{\"vin\":\"KNEDE244286326229\",\"bpno\":\"KEURPTC05\",\"pceg\":\"RIO 05: SEP.2006-                                           \",\"pjcd\":\"JB\",\"grty\":\"TC\",\"pcty\":\"P\",\"ofdt\":\"20071012\",\"nacd\":\"C21\",\"naeg\":\"UNITED KINGDOM\",\"ucdt\":\"R\",\"ucdtteg\":\"DRIVE TYPE\",\"ucuceg\":\"DRIVE TYPE - RHD\",\"ucwt\":\"3\",\"wtucteg\":\"WEATHER TYPE\",\"wtucceg\":\"WEATHER - THE TEMPERATE ZONE\",\"bdcd\":\"K\",\"tbcd\":\"A\",\"ikty\":\"P\",\"vtag\":\"1\",\"glyn\":\"Y\"},\"fscInfo\":{\"fsc1\":\"5\",\"vgfsc\":\"C21ABNS61BC55   A56620\",\"fsc\":\"5|C21A|BNS61BC55|A566|20\",\"engine\":\"R33D(D4FA7H355944)\",\"transmission\":\"TC28(P71763523210)\",\"seat\":\"\"},\"antifreezeList\":[],\"colorList\":[{\"teg\":\"Interior\",\"iccd\":\"XI\",\"uleg\":\"GRAY\"},{\"teg\":\"Exterior\",\"iccd\":\"9B\",\"uleg\":\"MIDNIGHT BLACK\"}]}"}, {"method": "POST", "url": "https://wpc.mobis.co.kr/search/getLargeGroupKeyList.do", "reqContentType": "application/x-www-form-urlencoded", "reqBody": "vin=KNEDE244286326229&bpno=KEURPTC05", "resBody": "{\"resultList\":[{\"lreg\":\"ДВИГАТЕЛЬ\",\"lrcd\":\"EN\",\"soor\":\"1\"},{\"lreg\":\"ТРАНСМИССИЯ\",\"lrcd\":\"MI\",\"soor\":\"2\"},{\"lreg\":\"ХОДОВАЯ ЧАСТЬ\",\"lrcd\":\"CH\",\"soor\":\"3\"},{\"lreg\":\"КУЗОВ\",\"lrcd\":\"BO\",\"soor\":\"4\"},{\"lreg\":\"ОСНАЩЕНИЕ КУЗОВА\",\"lrcd\":\"TR\",\"soor\":\"5\"},{\"lreg\":\"ЭЛЕКТРОБОРУДОВАНИЕ\",\"lrcd\":\"EL\",\"soor\":\"6\"},{\"soor\":7,\"lrcd\":\"CN\",\"lreg\":\"CONNECTOR\"}]}"}, {"method": "POST", "url": "https://wpc.mobis.co.kr/search/getUniqueGroupKeyList.do", "reqContentType": "application/x-www-form-urlencoded", "reqBody": "vin=KNEDE244286326229&lrcd=EN&grty=TC&bpno=KEURPTC05&isvin=VIN", "resBody": "{\"lgioList\":[{\"lipg\":1,\"ugno\":\"20-201\",\"ocx1\":1725,\"ocy1\":655,\"ocw1\":135,\"och1\":44,\"trnm\":\"Подрамник двигателя в сборе\"},{\"lipg\":1,\"ugno\":\"20-202\",\"ocx1\":1725,\"ocy1\":693,\"ocw1\":135,\"och1\":44,\"trnm\":\"Короткоходный двигатель в сборе\"}],\"uhkList\":[{\"ugno\":\"09-091\",\"ugeg\":\"Бортовой инструмент\",\"grno\":\"09-091\",\"efin\":\"\",\"efot\":\"\",\"rnum\":1,\"desc\":\"\"},{\"ugno\":\"20-201\",\"ugeg\":\"Подрамник двигателя в сборе\",\"grno\":\"20-201B\",\"efin\":\"\",\"efot\":\"\",\"rnum\":1,\"desc\":\"1500 CC - U\"}],\"pageList\":[{\"lipg\":1,\"gif\":\"Y\",\"png\":\"\",\"lhfile\":\"TC_EN1\",\"lhfold\":\"/illust/LGROUPM\",\"totalpage\":2},{\"lipg\":2,\"gif\":\"Y\",\"png\":\"Y\",\"lhfile\":\"da99499f2c9d453c82bf6bf32d6db222\",\"lhfold\":\"/illust/LGROUPM\",\"totalpage\":2}]}"}, {"method": "POST", "url": "https://wpc.mobis.co.kr/search/getFinalGroupKeyList.do", "reqContentType": "application/x-www-form-urlencoded", "reqBody": "ugno=09-091&grno=09-091&isvin=VIN&ismulti=multi&glyn=Y&vin=KNEDE244286326229&bpno=KEURPTC05", "resBody": "{\"imageList\":[{\"rn\":1,\"gipg\":1,\"gity\":1,\"gpfg\":\"P\",\"pnc\":\"09110\",\"ocx1\":374,\"ocy1\":491,\"ocw1\":72,\"och1\":25,\"ptnm\":\"ДОМКРАТ\",\"pngyn\":\"\",\"gifyn\":\"Y\",\"tifyn\":\"Y\",\"lrcd\":\"EN\",\"ugno\":\"09-091\",\"grno\":\"09-091\",\"soor\":1}],\"partList\":[{\"pnc\":\"09110\",\"ctfg\":\"N\",\"penm\":\"ДОМКРАТ\",\"ptno\":\"091101C000\",\"rmk\":\"\",\"qty\":1,\"pifg\":\"Y\",\"p3dfg\":\"N\",\"tifg\":\"N\",\"memofg\":\"N\",\"amfg\":\"N\",\"p2fg\":\"N\",\"bkfg\":\"N\",\"suc\":\"\",\"pric\":0,\"pccd\":\"\",\"sycd\":\"S\",\"ccn\":\"\",\"bpno\":\"KEURPTC05\",\"grno\":\"09-091\",\"fclr\":\"#75a247\",\"mult\":1}],\"pageList\":[{\"rn\":1,\"gipg\":1,\"gity\":1,\"png\":\"\",\"gif\":\"Y\",\"tif\":\"Y\",\"lkfold\":\"/illust/GROUP/KEURPTC05\",\"lkfile\":\"09-09111\",\"soor\":1,\"totalpage\":1}]}"}];
+
+/* id — GUID, стабильный идентификатор запроса (используется в ссылках chain:<id>:<path>).
+   harIndex — неизменный хронологический индекс (только для "что было раньше").
+   order (в mapping) — отдельное отображаемое поле, не идентификатор. */
+function makeGuid(){
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+}
+function hydrateCapture(rawList){ return rawList.map((r, idx) => ({ id: makeGuid(), harIndex: idx, ...r })); }
+let CAPTURE_DATA = hydrateCapture(DEMO_CAPTURE_RAW);
+
+/* =========================================================================
+   ИМПОРТ HAR ИЗ ФАЙЛА (реального проводника) — статические ресурсы отсеиваются,
+   query-параметры парсятся всегда, тело — если это не GET.
+   ========================================================================= */
+function isLikelyStaticHarEntry(e){
+  const url = (e.request && e.request.url || '').toLowerCase();
+  if (/\.(css|js|mjs|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|otf|map)(\?|$)/.test(url)) return true;
+  const mime = ((e.response && e.response.content && e.response.content.mimeType) || '').toLowerCase();
+  if (mime.includes('image/') || mime.includes('font/') || mime.includes('text/css') || mime.includes('javascript') || mime.includes('text/html')) return true;
+  return false;
+}
+function parseHarText(text){
+  const har = JSON.parse(text);
+  const entries = (har.log && har.log.entries) || [];
+  const kept = [];
+  entries.forEach(e=>{
+    if (isLikelyStaticHarEntry(e)) return;
+    const req = e.request, res = e.response;
+    const pd = req.postData || {};
+    kept.push({
+      id: makeGuid(), harIndex: kept.length, method: req.method, url: req.url,
+      reqContentType: (pd.mimeType || '').split(';')[0].trim(),
+      reqBody: pd.text || '', resBody: (res.content && res.content.text) || ''
+    });
+  });
+  return kept;
+}
+
+const OP_SELECT_OPTIONS = [{id:'',label:'— не сопоставлено —'}, ...GOLD_API_REQUESTS, {id:'skip',label:'⨯ игнорировать'}];
+
+/* =========================================================================
+   УТИЛИТЫ РАЗБОРА JSON/URL/схем HAR
+   ========================================================================= */
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstChild; }
+function normalizeKeyName(k){
+  if (!k) return '';
+  const prefixes = ['search','vg','cm'];
+  let s = k;
+  for (const p of prefixes){ if (s.length > p.length + 1 && s.toLowerCase().startsWith(p)){ s = s.slice(p.length); break; } }
+  return s.toLowerCase();
+}
+function parseRequestFields(entry){
+  let out = {};
+  try { const u = new URL(entry.url); u.searchParams.forEach((v,k)=>{ out[k] = v; }); } catch(e){}
+  if (entry.method !== 'GET'){
+    const ct = (entry.reqContentType||'').toLowerCase();
+    if (ct.includes('json')){
+      try { Object.assign(out, flattenShallow(JSON.parse(entry.reqBody||'{}'))); } catch(e){}
+    } else if (entry.reqBody){
+      entry.reqBody.split('&').filter(Boolean).forEach(pair=>{
+        const idx = pair.indexOf('=');
+        const k = idx>=0 ? pair.slice(0,idx) : pair;
+        const v = idx>=0 ? pair.slice(idx+1) : '';
+        try { out[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g,' ')); } catch(e){ out[k]=v; }
+      });
+    }
+  }
+  return out;
+}
+function flattenShallow(obj, prefix=''){
+  let out = {};
+  if (!obj || typeof obj !== 'object') return out;
+  for (const k of Object.keys(obj)){
+    const v = obj[k]; const p = prefix ? prefix+'.'+k : k;
+    if (v && typeof v === 'object' && !Array.isArray(v)) Object.assign(out, flattenShallow(v, p));
+    else if (!Array.isArray(v)) out[p] = v;
+  }
+  return out;
+}
+function buildSchema(value){
+  if (Array.isArray(value)){
+    const children = value.length ? buildSchema(value[0]) : [];
+    return [{ path:'', type:'array', isArray:true, children, count:value.length }];
+  }
+  if (value && typeof value === 'object'){
+    let out = [];
+    for (const k of Object.keys(value)){
+      const v = value[k];
+      if (Array.isArray(v)) out.push({ path:k, type:'array', isArray:true, count:v.length, children: v.length?buildSchema(v[0]):[] });
+      else if (v && typeof v === 'object') out.push({ path:k, type:'object', isArray:false, children: buildSchema(v) });
+      else out.push({ path:k, type: typeof v, isArray:false, children:null, sample:String(v) });
+    }
+    return out;
+  }
+  return [];
+}
+function flattenSchemaPaths(nodes, prefix){
+  let out = [];
+  nodes.forEach(n=>{
+    if (n.isArray){
+      const full = (prefix ? (n.path? prefix+'.'+n.path : prefix) : n.path) + '[]';
+      if (n.children && n.children.length) out = out.concat(flattenSchemaPaths(n.children, full));
+      else out.push(full);
+    } else if (n.children && n.children.length){
+      const full = prefix ? (n.path? prefix+'.'+n.path : prefix) : n.path;
+      out = out.concat(flattenSchemaPaths(n.children, full));
+    } else out.push(prefix ? prefix+'.'+n.path : n.path);
+  });
+  return out;
+}
+function findKeyMatches(currentHarIndex, fieldName){
+  const target = normalizeKeyName(fieldName);
+  if (!target) return [];
+  let matches = [];
+  CAPTURE_DATA.forEach(e=>{
+    if (e.harIndex >= currentHarIndex) return;
+    let json; try { json = JSON.parse(e.resBody); } catch(err){ return; }
+    const paths = flattenSchemaPaths(buildSchema(json), '');
+    paths.forEach(p=>{
+      const segs = p.split('.');
+      const lastSeg = segs[segs.length-1].replace(/\[\]$/,'');
+      if (lastSeg && normalizeKeyName(lastSeg) === target) matches.push({ id:e.id, harIndex:e.harIndex, method:e.method, url:e.url, path:p, key:lastSeg });
+    });
+  });
+  return matches;
+}
+function getValueAtPath(json, path){
+  if (!path) return json;
+  const segs = path.replace(/\[\]/g,'.0').split('.').filter(Boolean);
+  let cur = json;
+  for (const s of segs){ if (cur==null) return undefined; cur = cur[s]; }
+  return cur;
+}
+function shortName(url){ try { return new URL(url).pathname.split('/').pop().replace(/\.do$/,''); } catch(e){ return url; } }
+function pathOf(url){ try { return new URL(url).pathname; } catch(e){ return url; } }
+function colorizeJson(text){
+  return esc(text).replace(/("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function(m){
+    let cls = 'jn';
+    if (/^"/.test(m)) cls = /:$/.test(m) ? 'jk' : 'js';
+    else if (/true|false/.test(m)) cls = 'jb';
+    else if (/null/.test(m)) cls = 'jz';
+    return '<span class="'+cls+'">'+m+'</span>';
+  });
+}
+function targetLabelFor(op, roleKey){
+  const found = getResponseTargetsForOp(op).find(t=>t.key===roleKey);
+  return found ? found.value : roleKey;
+}
+function humanReqRole(currentOpId, role){
+  if (isEmptyReqRole(role)) return 'не сопоставлено';
+  if (role.startsWith('chain:')){
+    const parts = role.split(':');
+    const srcId = parts[1];
+    const srcPath = parts.slice(2).join(':');
+    const ctxName = normalizeKeyName(srcPath.split('.').pop().replace(/\[\]$/,''));
+    const srcGroup = groupById(srcId);
+    const srcOp = srcGroup ? srcGroup.mapping.op : '';
+    const srcLabel = srcGroup ? `${srcGroup.entry.method} ${pathOf(srcGroup.entry.url)}` : '(запрос удалён)';
+    if (srcOp && srcOp === currentOpId) return `ctx.${ctxName} (из шага "${srcLabel}" этой же цепочки)`;
+    return `decrypt(vehicleId).context.${ctxName} (передано из операции "${srcOp}", шаг "${srcLabel}")`;
+  }
+  const found = getRequestBodyLabelsForOp(currentOpId).find(l=>l.key===role);
+  return found ? stripArrow(found.value) : role;
+}
+
+/* =========================================================================
+   STATE
+   ========================================================================= */
+let STATE = null;
+let selectedId = null;
+let currentPage = 1;
+
+function buildGroups(){
+  return CAPTURE_DATA.map(entry => {
+    const reqFields = parseRequestFields(entry);
+    let resJson = {}; try { resJson = JSON.parse(entry.resBody); } catch(e){}
+    return {
+      id: entry.id, entry,
+      reqFieldNames: Object.keys(reqFields),
+      reqFieldValues: reqFields,
+      resSchema: buildSchema(resJson),
+      mapping: { op:'', order:1, title:'', isFinal:false, reqRoles:{}, resRoles:{} }
+    };
+  });
+}
+function initState(){
+  STATE = {
+    groups: buildGroups(),
+    catalogCode:'MOBIS_WPC',
+    opTitles: {},
+    customFields: { vinIdentification: { attributes: [] } },
+    languageEnabled: { ru:true, en:true },
+    modsEnabled: { manual:true, vin:true, chasis:true },
+    fixedPreviewOpen: { languages:false, identificationMods:false },
+  };
+  selectedId = STATE.groups.length ? STATE.groups[0].id : null;
+}
+function groupById(id){ return STATE.groups.find(g=>g.id===id); }
+
+/* =========================================================================
+   АВТО-РАЗМЕТКА (демонстрационная). Явные reqRoles в плане нужны только там, где
+   в реальном HAR нет подходящего имени поля для авто-цепочки (chain-match); всё
+   остальное подхватывается автоматически через findKeyMatches.
+   ========================================================================= */
+const DEMO_AUTO_PLAN = {
+  getVinList: { op:'vinIdentification', order:1, reqRoles:{ vin:'vin' } },
+  getVinCheck: { op:'vinIdentification', order:2, reqRoles:{ searchVin:'vin' } },
+  getVinInfo: { op:'vinIdentification', order:3, isFinal:true, reqRoles:{ searchVin:'vin' },
+    resRoles:{ 'carInfo.bpno':'vehicleId', 'carInfo.vin':'attributes.VIN', 'carInfo.naeg':'attributes.NationalCode', 'carInfo.grty':'attributes.CarSeries' } },
+  getLargeGroupKeyList: { op:'tree', order:1, reqRoles:{ vin:'vehicleId' },
+    resRoles:{ 'resultList[].lreg':'name', 'resultList[].lrcd':'id' } },
+  getUniqueGroupKeyList: { op:'treeChild', order:1,
+    resRoles:{ 'lgioList[].trnm':'name', 'lgioList[].ugno':'id' } },
+  getFinalGroupKeyList: { op:'treePartsTable', order:1,
+    resRoles:{
+      'imageList[].pnc':'coordinates.code', 'imageList[].ocx1':'coordinates.x', 'imageList[].ocy1':'coordinates.y',
+      'imageList[].ocw1':'coordinates.width', 'imageList[].och1':'coordinates.height',
+      'partList[].pnc':'table.row.code', 'partList[].ptno':'table.row.partNumber',
+      'partList[].penm':'table.row.name', 'partList[].qty':'table.row.quantity'
+    } },
+};
+function autoAnnotate(){
+  STATE.groups.forEach(g=>{
+    const key = shortName(g.entry.url);
+    const p = DEMO_AUTO_PLAN[key];
+    if (!p) return;
+    g.mapping.op = p.op; g.mapping.order = p.order; g.mapping.isFinal = !!p.isFinal;
+    if (p.resRoles) Object.assign(g.mapping.resRoles, p.resRoles);
+    g.reqFieldNames.forEach(f=>{
+      const override = p.reqRoles && p.reqRoles[f];
+      if (override){ g.mapping.reqRoles[f] = override; return; }
+      const matches = findKeyMatches(g.entry.harIndex, f);
+      if (matches.length) g.mapping.reqRoles[f] = `chain:${matches[0].id}:${matches[0].path}`;
+    });
+    const opDef = GOLD_API_REQUESTS.find(o=>o.id===p.op);
+    if (opDef && opDef.needsTitle && STATE.opTitles[p.op]===undefined) STATE.opTitles[p.op] = opDef.defaultTitle;
+  });
+  render();
+}
+function deleteGroup(id){
+  if (!confirm('Удалить этот запрос из разбора?')) return;
+  STATE.groups = STATE.groups.filter(g=>g.id!==id);
+  if (selectedId===id) selectedId = STATE.groups.length ? STATE.groups[0].id : null;
+  render();
+}
+
+/* =========================================================================
+   RENDER — PAGE 1
+   ========================================================================= */
+function renderTimeline(){
+  const tl = document.getElementById('timeline');
+  tl.innerHTML = '';
+  const ordered = [...STATE.groups].sort((a,b)=>a.entry.harIndex-b.entry.harIndex);
+  ordered.forEach(g=>{
+    const cls = ['tl-item'];
+    if (g.mapping.isFinal) cls.push('final'); else if (g.mapping.op) cls.push('mapped');
+    if (g.id===selectedId) cls.push('active');
+    const item = el(`<div class="${cls.join(' ')}" title="${esc(g.entry.method+' '+g.entry.url)}">
+        <span class="n">#${g.entry.harIndex}</span>${shortName(g.entry.url).slice(0,4)}
+        ${g.mapping.op?`<span class="o">${g.mapping.order}</span>`:''}
+      </div>`);
+    item.addEventListener('click', ()=>{ selectedId = g.id; render(); });
+    tl.appendChild(item);
+  });
+}
+function renderGroupList(){
+  document.getElementById('groupCount').textContent = `(${STATE.groups.length})`;
+  const wrap = document.getElementById('groupList');
+  wrap.innerHTML = '';
+  if (!STATE.groups.length){ wrap.innerHTML = '<div class="empty">Все запросы удалены — импортируйте HAR заново.</div>'; return; }
+  STATE.groups.forEach(g=>{
+    const opDef = GOLD_API_REQUESTS.find(o=>o.id===g.mapping.op);
+    const opLabel = opDef?.label || '— не сопоставлено —';
+    const showFinal = opDef && opDef.hasFinalFlag;
+    const title = opDef && opDef.needsTitle ? (STATE.opTitles[g.mapping.op]||'') : '';
+    const card = el(`
+      <div class="group ${g.id===selectedId?'active':''} ${(showFinal && g.mapping.isFinal)?'final-true':''}">
+        <button class="del-btn" title="Удалить запрос">${TRASH_SVG}</button>
+        <div><span class="method">${g.entry.method}</span><span class="path">${esc(pathOf(g.entry.url))}</span></div>
+        ${showFinal ? `<div class="final-line ${g.mapping.isFinal?'true':'false'}">isFinal: ${g.mapping.isFinal?'true':'false'}</div>` : ''}
+        <div class="meta">HAR #${g.entry.harIndex}</div>
+        <div class="op-badge ${g.mapping.op?'set':''}">${esc(opLabel)}${g.mapping.op?`<span class="order-badge">№${g.mapping.order}</span>`:''}</div>
+        ${title ? `<div class="title-line">title: "${esc(title)}"</div>` : ''}
+      </div>`);
+    card.addEventListener('click', (e)=>{ if (e.target.closest('.del-btn')) return; selectedId = g.id; render(); });
+    card.querySelector('.del-btn').addEventListener('click', (e)=>{ e.stopPropagation(); deleteGroup(g.id); });
+    wrap.appendChild(card);
+  });
+}
+function renderReqFieldsEditor(g){
+  if (!g.reqFieldNames.length) return '<div class="empty">Нет параметров запроса.</div>';
+  const baseLabels = getRequestBodyLabelsForOp(g.mapping.op);
+  return g.reqFieldNames.map(f=>{
+    const role = g.mapping.reqRoles[f] || '';
+    const matches = findKeyMatches(g.entry.harIndex, f);
+    const dynOpts = matches.map(m=>{
+      const val = `chain:${m.id}:${m.path}`;
+      const label = `⇐ ответ #${m.harIndex} ${shortName(m.url)}.do (ключ ${m.key})`;
+      return `<option value="${esc(val)}" ${val===role?'selected':''}>${esc(label)}</option>`;
+    }).join('');
+    const baseOpts = baseLabels.map(o=>`<option value="${o.key}" ${o.key===role?'selected':''}>${esc(o.value)}</option>`).join('');
+    const badges = matches.length ? `<div class="match-badges">${matches.map(m=>`<span class="match-badge">встречается в ответе #${m.harIndex} ${shortName(m.url)}.do (${esc(m.key)})</span>`).join('')}</div>` : '';
+    return `<div class="field-row" data-path="${esc(f)}">
+        <span class="fname">${esc(f)}</span>
+        <span class="fval" title="${esc(String(g.reqFieldValues[f]))}">${esc(String(g.reqFieldValues[f]))}</span>
+        <select class="req-role-select" data-path="${esc(f)}">${baseOpts}${dynOpts}</select>
+        ${badges}
+      </div>`;
+  }).join('');
+}
+function renderSchemaEditor(g){
+  if (!g.mapping.op) return `<div class="empty">Сначала выберите операцию контракта справа — список доступных целей маппинга зависит от неё.</div>`;
+  const targets = getResponseTargetsForOp(g.mapping.op);
+  let rows = [];
+  function walk(nodes, depth, prefix){
+    nodes.forEach(n=>{
+      const full = n.isArray ? ((prefix?(n.path?prefix+'.'+n.path:prefix):n.path)+'[]') : (prefix?(n.path?prefix+'.'+n.path:prefix):n.path);
+      const role = g.mapping.resRoles[full] || '';
+      const opts = targets.map(o=>`<option value="${o.key}" ${o.key===role?'selected':''}>${esc(o.value)}</option>`).join('');
+      rows.push(`<div class="schema-row schema-indent-${Math.min(depth,3)}" data-path="${esc(full)}">
+        <span class="path">${esc(n.path||'[]')}${n.isArray?`<span class="schema-arr-tag">array · ${n.count}</span>`:''}</span>
+        <span class="type">${n.type}</span>
+        <select class="res-role-select" data-path="${esc(full)}">${opts}</select>
+      </div>`);
+      if (n.children && n.children.length) walk(n.children, depth+1, full);
+    });
+  }
+  walk(g.resSchema, 0, '');
+  return rows.join('');
+}
+function renderDetail(){
+  const wrap = document.getElementById('detail');
+  const g = selectedId!==null ? groupById(selectedId) : null;
+  if (!g){ wrap.innerHTML = '<div class="empty">Выберите запрос слева.</div>'; return; }
+  let pretty = g.entry.resBody;
+  try { pretty = JSON.stringify(JSON.parse(g.entry.resBody), null, 2); } catch(e){}
+  wrap.innerHTML = `
+    <div class="block">
+      <div class="block-h"><span>${esc(g.entry.method)}</span><span class="full-url">${esc(g.entry.url)}</span></div>
+      <div class="block-body">
+        <div style="font-size:10px;color:var(--text-faint);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">
+          ${g.entry.method==='GET'?'Query-параметры':'Параметры (query + тело запроса, '+esc(g.entry.reqContentType||'—')+')'}
+        </div>
+        ${renderReqFieldsEditor(g)}
+      </div>
+    </div>
+    <div class="block">
+      <div class="block-h"><span>Ответ — полный JSON</span></div>
+      <div class="block-body"><pre class="json">${colorizeJson(pretty)}</pre></div>
+    </div>
+    <div class="block">
+      <div class="block-h"><span>Схема ответа — разметка полей</span></div>
+      <div class="block-body">${renderSchemaEditor(g)}</div>
+    </div>
+  `;
+  wrap.querySelectorAll('.req-role-select').forEach(s=>{
+    s.addEventListener('change', e=>{ g.mapping.reqRoles[e.target.dataset.path] = e.target.value; render(); });
+  });
+  wrap.querySelectorAll('.res-role-select').forEach(s=>{
+    s.addEventListener('change', e=>{ g.mapping.resRoles[e.target.dataset.path] = e.target.value; render(); });
+  });
+}
+
+/* Отрисовка эталонной схемы GOLD_API_SCHEMAS в правой панели. Рекурсивная (из-за
+   NODE_SCHEMA.child → NODE_SCHEMA) — защищаемся через Set(seen) от бесконечного цикла. */
+function renderGoldSchemaNode(node, depth, seen){
+  if (!node) return '';
+  if (node.fields){
+    if (seen.has(node)){
+      return `<div class="std-row std-indent-${Math.min(depth,2)}"><span class="std-key" style="color:var(--text-faint);font-style:italic;">… рекурсивно (структура такая же, как у родителя)</span></div>`;
+    }
+    const seen2 = new Set(seen); seen2.add(node);
+    let out = '';
+    node.fields.forEach(f=>{
+      if (f.kind === 'array'){
+        out += `<div class="std-row std-indent-${Math.min(depth,2)}"><span class="std-key">${esc(f.key)}[]</span><span class="std-type">массив</span></div>`;
+        out += renderGoldSchemaNode(f.items, depth+1, seen2);
+      } else if (f.type === 'object' && f.fields){
+        out += `<div class="std-row std-indent-${Math.min(depth,2)}"><span class="std-key">${esc(f.key)}</span><span class="std-type">object</span></div>`;
+        out += renderGoldSchemaNode(f, depth+1, seen2);
+      } else {
+        out += `<div class="std-row std-indent-${Math.min(depth,2)}"><span class="std-key">${esc(f.key)}</span><span class="std-type">${esc(f.type||'')}</span></div>`;
+      }
+    });
+    return out;
+  }
+  if (node.type){
+    return `<div class="std-row std-indent-${Math.min(depth,2)}"><span class="std-key">(элемент)</span><span class="std-type">${esc(node.type)}</span></div>`;
+  }
+  return '';
+}
+function renderGoldSchemaRoot(schema){
+  if (!schema) return '<div class="empty-inline">схема не определена</div>';
+  if (schema.kind === 'array'){
+    return `<div class="std-row"><span class="std-key">[ ]</span><span class="std-type">массив</span></div>` + renderGoldSchemaNode(schema.items, 1, new Set());
+  }
+  return renderGoldSchemaNode(schema, 0, new Set());
+}
+/* Доп. блок только для vinIdentification: список вручную добавленных атрибутов
+   поверх фиксированного набора из GOLD_API_RESPONSE_TARGETS + форма добавления */
+function renderAttributesExtension(){
+  const list = STATE.customFields.vinIdentification.attributes;
+  const existing = list.map(cf=>`<div class="std-extra">＋ attributes.${esc(cf.key)} <span style="color:var(--text-faint);">(добавлено вручную)</span></div>`).join('');
+  return `<div class="right-note" style="margin-top:10px;">Доп. атрибуты сверх стандартного набора (attributes.*):</div>
+    <div class="std-schema">${existing}
+      <div class="std-add-row">
+        <input type="text" id="attrAddInput" placeholder="имя атрибута, напр. Transmission">
+        <button id="attrAddBtn">+ добавить</button>
+      </div>
+    </div>`;
+}
+function renderRight(){
+  const wrap = document.getElementById('rightPanel');
+  const g = selectedId!==null ? groupById(selectedId) : null;
+  if (!g){ wrap.innerHTML = '<div class="empty">Выберите запрос слева.</div>'; return; }
+  const opts = OP_SELECT_OPTIONS.map(o=>`<option value="${o.id}" ${o.id===g.mapping.op?'selected':''}>${esc(o.label)}</option>`).join('');
+  const opDef = GOLD_API_REQUESTS.find(o=>o.id===g.mapping.op);
+  let titleHtml = '';
+  if (opDef && opDef.needsTitle){
+    if (STATE.opTitles[g.mapping.op] === undefined) STATE.opTitles[g.mapping.op] = opDef.defaultTitle;
+    titleHtml = `<label class="inline">title для «${opDef.label}»: <input type="text" id="titleInput" value="${esc(STATE.opTitles[g.mapping.op])}" style="flex:1;"></label>`;
+  }
+  let finalHtml = '';
+  if (opDef && opDef.hasFinalFlag){
+    finalHtml = `<label class="checkbox-row"><input type="checkbox" id="isFinalInput" ${g.mapping.isFinal?'checked':''}> isFinal — это финальный шаг цепочки</label>`;
+  }
+  let stdHtml = '';
+  if (opDef && GOLD_API_SCHEMAS[opDef.id]){
+    stdHtml = `<div class="right-note" style="margin-top:12px;">Эталонная схема ответа для «${esc(opDef.label)}» (справочно — какие поля вообще предусмотрены контрактом):</div>
+      <div class="std-schema">${renderGoldSchemaRoot(GOLD_API_SCHEMAS[opDef.id])}</div>
+      ${opDef.id==='vinIdentification' ? renderAttributesExtension() : ''}`;
+  }
+  wrap.innerHTML = `
+    <div class="right-note">Операция стандартного контракта, которой соответствует этот запрос:</div>
+    <select id="opSelect" style="width:100%;margin-bottom:10px;">${opts}</select>
+    <label class="inline">Порядковый номер в цепочке (order, только для отображения): <input type="number" id="orderInput" min="1" value="${g.mapping.order}"></label>
+    ${finalHtml}
+    ${titleHtml}
+    <div class="right-note">
+      ${g.mapping.op ? `Этот запрос — шаг №${g.mapping.order} операции <b>${esc(g.mapping.op)}</b>. Несколько запросов с одной операцией соберутся в цепочку по order.` : 'Пока не сопоставлено ни с одной операцией контракта.'}
+    </div>
+    ${stdHtml}
+  `;
+  document.getElementById('opSelect').addEventListener('change', e=>{
+    g.mapping.op = e.target.value; if (!g.mapping.order) g.mapping.order = 1; render();
+  });
+  document.getElementById('orderInput').addEventListener('change', e=>{ g.mapping.order = parseInt(e.target.value)||1; render(); });
+  const ti = document.getElementById('titleInput');
+  if (ti) ti.addEventListener('change', e=>{ STATE.opTitles[g.mapping.op] = e.target.value; render(); });
+  const fi = document.getElementById('isFinalInput');
+  if (fi) fi.addEventListener('change', e=>{ g.mapping.isFinal = e.target.checked; render(); });
+  const attrBtn = document.getElementById('attrAddBtn');
+  if (attrBtn) attrBtn.addEventListener('click', ()=>{
+    const input = document.getElementById('attrAddInput');
+    let name = (input.value||'').trim().replace(/\s+/g,'').replace(/[^a-zA-Z0-9_]/g,'');
+    if (!name) return;
+    const list = STATE.customFields.vinIdentification.attributes;
+    if (!list.some(f=>f.key===name)) list.push({key:name});
+    render();
+  });
+}
+function renderProgress(){
+  const total = STATE.groups.length;
+  const done = STATE.groups.filter(g=>g.mapping.op && g.mapping.op!=='skip').length;
+  document.getElementById('progressBar').style.width = total ? (done/total*100)+'%' : '0%';
+  document.getElementById('progressText').textContent = `${done} / ${total} запросов HAR сопоставлено с контрактом`;
+}
+
+/* =========================================================================
+   RENDER — PAGE 2
+   ========================================================================= */
+function renderStepSummary(g, opId){
+  const entry = g.entry;
+  let resJson = {}; try{ resJson=JSON.parse(entry.resBody); }catch(e){}
+  const reqRows = g.reqFieldNames.map(f=>{
+    const role = g.mapping.reqRoles[f]||'';
+    return `<div class="kv"><span class="k">${esc(f)} = ${esc(String(g.reqFieldValues[f]))}</span><span class="role">${esc(humanReqRole(opId, role))}</span></div>`;
+  }).join('') || '<div class="empty-inline">нет параметров</div>';
+  const resEntries = Object.entries(g.mapping.resRoles).filter(([,v])=>!isEmptyResRole(v));
+  const resRows = resEntries.map(([path, role])=>{
+    const val = getValueAtPath(resJson, path);
+    const sample = typeof val === 'object' ? JSON.stringify(val).slice(0,90) : String(val);
+    return `<div class="kv"><span class="k">${esc(path)}</span><span class="arrow">→</span><span class="v">${esc(stripArrow(targetLabelFor(opId, role)))}</span><span class="role">пример: ${esc(sample)}</span></div>`;
+  }).join('') || '<div class="empty-inline">поля ответа не сопоставлены</div>';
+  return `<div class="step-summary">
+    <div class="step-summary-h">Шаг №${g.mapping.order} · ${esc(entry.method)} <span class="full-url">${esc(entry.url)}</span></div>
+    <div class="step-summary-section"><div class="ss-label">Тело запроса → откуда берётся значение</div>${reqRows}</div>
+    <div class="step-summary-section"><div class="ss-label">Ответ → сопоставленные стандартные поля</div>${resRows}</div>
+  </div>`;
+}
+/* JSON фиксированного ответа строится строго по форме GOLD_API_SCHEMAS
+   (languages → {languages:[...]}, identificationMods → {mods:[...]}), а не
+   произвольно — коды языков/режимов берутся из FIXED_*_OPTIONS с учётом чекбоксов. */
+function generateFixedResponseJson(opId){
+  const options = opId==='languages' ? FIXED_LANG_OPTIONS : FIXED_MODS_OPTIONS;
+  const enabledMap = opId==='languages' ? STATE.languageEnabled : STATE.modsEnabled;
+  const wrapperKey = opId==='languages' ? 'languages' : 'mods';
+  const codes = options.filter(o=>enabledMap[o.code]).map(o=>o.code);
+  const obj = {}; obj[wrapperKey] = codes;
+  return JSON.stringify(obj, null, 2);
+}
+function renderFixedListCard(op, options, enabledMap, storeKey){
+  const rows = options.map(o=>`<label class="checkbox-row"><input type="checkbox" class="fixed-cb" data-store="${storeKey}" data-op="${op.id}" data-code="${o.code}" ${enabledMap[o.code]?'checked':''}> ${o.code} — ${esc(o.label)}</label>`).join('');
+  const isOpen = !!STATE.fixedPreviewOpen[op.id];
+  return `<div class="op-card">
+    <div class="op-card-h">
+      <span class="name">${esc(op.label)}</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="badge on">стандартный ответ</span>
+        <button class="show-resp-btn" data-op="${op.id}">${isOpen ? 'Скрыть ответ' : 'Показать ответ'}</button>
+      </div>
+    </div>
+    <div class="op-card-body">
+      <div class="right-note" style="margin-top:10px;">Фиксированный эндпоинт: запрос к источнику не требуется, отдаётся статический список. Отметьте, какие значения включены в ответ.</div>
+      ${rows}
+      ${isOpen ? `<pre class="json" style="margin-top:10px;">${colorizeJson(generateFixedResponseJson(op.id))}</pre>` : ''}
+    </div>
+  </div>`;
+}
+function renderOtherOpCard(op){
+  const groups = STATE.groups.filter(g=>g.mapping.op===op.id).sort((a,b)=>(a.mapping.order||1)-(b.mapping.order||1));
+  const covered = groups.length>0;
+  const chain = covered ? `<div class="chain-steps">${groups.map((g,i)=>`<span class="chain-step">№${g.mapping.order} · ${esc(g.entry.method)} ${esc(pathOf(g.entry.url))}</span>${i<groups.length-1?'<span class="chain-arrow">→</span>':''}`).join('')}</div>` : '';
+  const body = covered
+    ? groups.map(g=>renderStepSummary(g, op.id)).join('')
+    : `<div class="empty">В HAR нет запросов, сопоставленных с этой операцией.</div>`;
+  const titleLine = (op.needsTitle && STATE.opTitles[op.id]) ? `<div class="right-note">title: "${esc(STATE.opTitles[op.id])}"</div>` : '';
+  return `<div class="op-card ${covered?'':'uncovered'}">
+    <div class="op-card-h"><span class="name">${esc(op.label)}</span><span class="badge ${covered?'on':''}">${covered? groups.length+' шаг(ов)':'не покрыто HAR'}</span></div>
+    ${chain}
+    <div class="op-card-body">${titleLine}${body}</div>
+  </div>`;
+}
+function renderPage2(){
+  const wrap = document.getElementById('page2');
+  const parts = [];
+  GOLD_API_REQUESTS.forEach(op=>{
+    if (op.id === 'languages') parts.push(renderFixedListCard(op, FIXED_LANG_OPTIONS, STATE.languageEnabled, 'languageEnabled'));
+    else if (op.id === 'identificationMods') parts.push(renderFixedListCard(op, FIXED_MODS_OPTIONS, STATE.modsEnabled, 'modsEnabled'));
+    else parts.push(renderOtherOpCard(op));
+  });
+  const unmapped = STATE.groups.filter(g=>!g.mapping.op);
+  if (unmapped.length){
+    parts.push(`<div class="warn-block">Не сопоставлено с контрактом (${unmapped.length}): ${unmapped.map(g=>`HAR #${g.entry.harIndex} ${esc(g.entry.method)} ${esc(pathOf(g.entry.url))}`).join(', ')}</div>`);
+  }
+  wrap.innerHTML = parts.join('\n');
+  wrap.querySelectorAll('.fixed-cb').forEach(cb=>{
+    cb.addEventListener('change', e=>{
+      STATE[e.target.dataset.store][e.target.dataset.code] = e.target.checked;
+      renderPage2();
+    });
+  });
+  wrap.querySelectorAll('.show-resp-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const op = btn.dataset.op;
+      STATE.fixedPreviewOpen[op] = !STATE.fixedPreviewOpen[op];
+      renderPage2();
+    });
+  });
+}
+
+/* =========================================================================
+   RENDER ROOT + WIRING
+   ========================================================================= */
+function render(){
+  renderTimeline(); renderGroupList(); renderDetail(); renderRight(); renderProgress();
+  if (currentPage === 2) renderPage2();
+}
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    currentPage = parseInt(btn.dataset.page);
+    document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('page1').style.display = currentPage===1 ? 'contents' : 'none';
+    document.getElementById('page2').style.display = currentPage===2 ? 'block' : 'none';
+    render();
+  });
+});
+document.getElementById('btnAuto').addEventListener('click', autoAnnotate);
+document.getElementById('btnReset').addEventListener('click', ()=>{ initState(); render(); });
+document.getElementById('btnImportHar').addEventListener('click', ()=> document.getElementById('harFileInput').click());
+document.getElementById('harFileInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const kept = parseHarText(reader.result);
+      if (!kept.length){ alert('В этом HAR не найдено запросов, похожих на вызовы API (после отсеивания статики).'); return; }
+      CAPTURE_DATA = kept;
+      initState();
+      document.getElementById('sourceTag').textContent = `— импортировано из файла «${file.name}» (${kept.length} запрос(ов) после отсева статики)`;
+      render();
+    } catch(err){ alert('Не удалось разобрать HAR-файл: ' + err.message); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+initState();
+render();
+</script>
+</body>
+</html>
