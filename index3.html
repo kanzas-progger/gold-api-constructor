@@ -150,11 +150,10 @@
 <div class="app">
 
   <header>
-    <h1><span class="dot"></span>Recipe Constructor <span class="tag" id="sourceTag">— демо-данные (Mobis/KIA WPC); импортируйте свой HAR кнопкой справа</span></h1>
+    <h1><span class="dot"></span>Recipe Constructor <span class="tag" id="sourceTag">— импортируйте свой HAR-файл кнопкой справа</span></h1>
     <div class="toolbar">
       <button id="btnImportHar">📁 Импортировать HAR</button>
       <input type="file" id="harFileInput" accept=".har,application/json" style="display:none;">
-      <button id="btnAuto">Авто-разметить (демо)</button>
       <button id="btnReset">Сбросить разметку</button>
     </div>
   </header>
@@ -448,7 +447,7 @@ const GOLD_API_SCHEMAS = {
 
 /* Фиксированные справочники languages / identificationMods — статические, к HAR
    отношения не имеют: это стандартные ответы конструктора, которые отдаются как
-   есть. Пользователь чекбоксами отмечает, какие значения включены в ответ. */
+   есть. Поль��ователь чекбоксами отмечает, какие значения включены в ответ. */
 const FIXED_LANG_OPTIONS = [{ code: 'ru', label: 'Русский' }, { code: 'en', label: 'English' }];
 const FIXED_MODS_OPTIONS = [{ code: 'manual', label: 'Пошаговый выбор' }, { code: 'vin', label: 'По VIN' }, { code: 'chasis', label: 'Шасси' }];
 
@@ -797,7 +796,7 @@ function renderReqFieldsEditor(g){
   }).join('');
 }
 function renderSchemaEditor(g){
-  if (!g.mapping.op) return `<div class="empty">Сначала выберите операцию контракта справа — список доступных целей маппинга зависит от неё.</div>`;
+  if (!g.mapping.op) return `<div class="empty">Сначала выберите операцию контра��та справа — список доступных целей маппинга зависит от неё.</div>`;
   const targets = getResponseTargetsForOp(g.mapping.op);
   let rows = [];
   function walk(nodes, depth, prefix){
